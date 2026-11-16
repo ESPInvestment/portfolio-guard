@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const html=fs.readFileSync('index.html','utf8');
+const script=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1].replace(/^\s*import\s+\{createClient\}[^\n]*\n/,'');
+const elements=new Map(),getElementById=id=>{
+ if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',textContent:'',files:[],classList:{toggle(){}},addEventListener(){}});
+ return elements.get(id);
+};
+const ctx=vm.createContext({document:{getElementById},localStorage:{getItem(){return null},setItem(){}},console,Date,Map,Set,JSON,Number,String});
+new vm.Script(script).runInContext(ctx);
+ctx.data='[{"isin":"FR0010524777","trade":"123.45"},{"isin":"OTHER"},{"isin":"LU0321465469"}]';
+const parsed=vm.runInContext('parseXetraSample(data)',ctx);
+assert.equal(parsed.records,3);
+assert.equal(parsed.count.FR0010524777,1);
+assert.equal(parsed.count.LU0321465469,1);
+assert.equal(parsed.count.IE00B3VWM098,0);
+assert.ok(html.includes('id="xetrafile"'));
+assert.ok(html.includes('id="inspectxetra"'));
+assert.ok(html.includes('DecompressionStream'));
+assert.ok(!script.includes("savePrice(result"));
+console.log('PASS Xetra inspector: local ISIN counting, no price extraction or writes');
