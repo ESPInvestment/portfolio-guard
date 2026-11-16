@@ -1,0 +1,17 @@
+name: Web-app CSV validation smoke test
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests/check_csv_preview.cjs
+      - run: node tests/check_csv_integration.cjs
+# No schedule, Supabase access, market data API or account writes.
