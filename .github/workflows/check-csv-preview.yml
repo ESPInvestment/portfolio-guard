@@ -15,4 +15,5 @@ jobs:
       - run: node tests/check_csv_preview.cjs
       - run: node tests/check_csv_integration.cjs
       - run: node tests/check_csv_template.cjs
+      - run: node tests/check_price_status.cjs
 # No schedule, Supabase access, market data API or account writes.
