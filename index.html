@@ -146,18 +146,37 @@ function parseXetraSample(text){
   try{parsed=JSON.parse(text)}catch(e){
     parsed=text.split(/\r?\n/).filter(x=>x.trim()).map(line=>JSON.parse(line));
   }
-  if(!Array.isArray(parsed))parsed=[parsed];
-  if(parsed.length>300000)throw Error('Zu viele Datensätze in dieser Testdatei');
   const count=Object.fromEntries(xetraIsins.map(k=>[k,0]));
-  const keys={};
-  for(const record of parsed){
-    if(!record||typeof record!=='object'||Array.isArray(record))continue;
-    const value=JSON.stringify(record);
+  const keys={},rootKeys=Object.keys(parsed&&typeof parsed==='object'?parsed:{});
+  const fieldCounts=new Map();
+  let objects=0,arrays=0,scanned=0;
+  const pending=[{value:parsed,depth:0}];
+  while(pending.length){
+    const {value,depth}=pending.pop();
+    if(value===null||typeof value!=='object')continue;
+    scanned++;
+    if(scanned>300000)throw Error('Zu viele Einträge in der Datei (max. 300.000)');
+    if(Array.isArray(value)){
+      arrays++;
+      if(depth<12)for(let i=value.length-1;i>=0;i--)pending.push({value:value[i],depth:depth+1});
+      continue;
+    }
+    objects++;
+    const fields=Object.keys(value);
+    for(const key of fields){fieldCounts.set(key,(fieldCounts.get(key)||0)+1);}
     for(const isin of xetraIsins){
-      if(value.includes(isin)){count[isin]++;if(!keys[isin])keys[isin]=Object.keys(record).slice(0,30);}
+      if(fields.some(key=>typeof value[key]==='string'&&value[key].toUpperCase()===isin)){
+        count[isin]++;
+        if(!keys[isin])keys[isin]=fields.slice(0,30);
+      }
+    }
+    if(depth<12)for(const key of fields){
+      const child=value[key];
+      if(child&&typeof child==='object')pending.push({value:child,depth:depth+1});
     }
   }
-  return {records:parsed.length,count,keys};
+  return {records:objects,count,keys,arrays,rootKeys:rootKeys.slice(0,25),
+    commonFields:[...fieldCounts].sort((a,b)=>b[1]-a[1]).slice(0,25)};
 }
 async function readXetraFile(file){
   if(!file)throw Error('Bitte eine Datei auswählen');
@@ -178,7 +197,11 @@ $('inspectxetra').onclick=async()=>{
   $('inspectxetra').disabled=true;
   try{
     const result=await readXetraFile($('xetrafile').files[0]);
-    $('xetraresult').innerHTML='<p>'+result.records+' JSON-Datensätze untersucht. ISIN-Treffer sind <b>kein</b> Nachweis eines Schlusskurses.</p>'
+    $('xetraresult').innerHTML='<p>'+result.records+' JSON-Objekte und '+result.arrays+' Arrays untersucht. ISIN-Treffer sind <b>kein</b> Nachweis eines Schlusskurses.</p>'
+      +'<p><b>Datei-Struktur:</b> '+esc(result.arrays?'JSON mit verschachtelten Listen':'JSON-Objekte ohne Listen')+'</p>'
+      +'<p><b>Felder auf oberster Ebene:</b> '+esc(result.rootKeys.join(', ')||'Keine')+'</p>'
+      +'<p><b>Häufigste Feldnamen:</b> '+esc(result.commonFields.map(x=>x[0]+' ('+x[1]+')').join(', ')||'Keine')+'</p>'
+      +(Object.values(result.count).every(x=>x===0)?'<p class="error"><b>0 ISIN-Treffer:</b> Möglicherweise keine Trades der acht ETFs in diesem Zeitfenster oder ein anderes Identifikationsformat. Eine einzelne Minutendatei beweist keine fehlende Abdeckung.</p>':'')
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Treffer</th><th>Gefundene Feldnamen (max. 30)</th></tr></thead><tbody>'
       +xetraIsins.map(isin=>'<tr><td>'+esc(isin)+'</td><td>'+result.count[isin]+'</td><td>'+esc((result.keys[isin]||[]).join(', ')||'–')+'</td></tr>').join('')
       +'</tbody></table></div><p>Kein Upload, kein Kursimport, keine Stop-Änderung.</p>';
