@@ -1,6 +1,6 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Portfolio Guard</title><style>
 :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#e9edf7;background:#101625}*{box-sizing:border-box}body{margin:0}header{background:#192237;padding:22px max(18px,calc((100vw - 1120px)/2));display:flex;justify-content:space-between;align-items:center;gap:12px}h1{margin:0;font-size:24px}h2{font-size:19px}small,.muted{color:#aab5c8}main{max-width:1120px;margin:auto;padding:22px 16px}section{background:#192237;border:1px solid #33405a;border-radius:14px;padding:18px;margin:14px 0}input,button,select{font:inherit;border-radius:8px;padding:10px;background:#101625;color:#fff;border:1px solid #4a5975}input{min-width:0}button{cursor:pointer;background:#2d62cf;border:0;font-weight:600}button.secondary{background:#34445f}button.danger{background:#874049}button:disabled{opacity:.45;cursor:not-allowed}label{display:block;font-size:13px;margin:10px 0 4px;color:#bdc9dd}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat{background:#111a2b;padding:16px;border-radius:10px}.stat strong{font-size:22px;display:block}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;min-width:860px}th,td{padding:12px 8px;border-bottom:1px solid #35415a;text-align:left;font-size:13px}th{color:#aab5c8}td input{width:76px;padding:7px}td button{padding:7px 9px}.pill{border-radius:30px;padding:5px 8px;white-space:nowrap;font-size:12px;background:#38455b}.pill.triggered{background:#9c3b4b}.pill.active{background:#226b57}.pill.waiting{background:#685c36}.pill.paused{background:#555}.hidden{display:none!important}.error{color:#ff9a9a}.ok{color:#8ee2b7}.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.hint{font-size:13px;line-height:1.5}#message{min-height:20px}#login input{width:100%}@media(max-width:600px){.stats{grid-template-columns:1fr}header{padding:16px}h1{font-size:20px}}
-</style></head><body><header><div><h1>◈ Portfolio Guard</h1><small>Tageskurse · individuelle Trailing-Stops · kein Handel</small></div><button id="logout" class="secondary hidden">Abmelden</button></header><main><section id="setup"><h2>1. Supabase verbinden</h2><p class="hint">Projekt-URL und <b>publishable/anon key</b> aus Supabase → Project Settings → API Keys. Niemals den service_role/secret key eintragen. Diese öffentlichen Verbindungsdaten bleiben nur in diesem Browser.</p><div class="grid"><div><label>Projekt-URL</label><input id="url" placeholder="https://xxxxx.supabase.co"></div><div><label>Publishable Key / anon key</label><input id="key" placeholder="sb_publishable_... oder eyJ..."></div></div><p><button id="connect">Verbinden</button></p></section><section id="login" class="hidden"><h2>2. Anmeldung</h2><div class="grid"><div><label>E-Mail</label><input id="email" type="email" autocomplete="email"></div><div><label>Passwort (mindestens 6 Zeichen)</label><input id="password" type="password" autocomplete="current-password"></div></div><p class="toolbar"><button id="signin">Anmelden</button><button id="signup" class="secondary">Registrieren</button></p><p class="hint">Falls E-Mail-Bestätigung in Supabase aktiviert ist, bestätige die Registrierung über den E-Mail-Link.</p></section><section id="app" class="hidden"><div class="toolbar"><button id="init">Zehn Positionen anlegen</button><button id="reload" class="secondary">Aktualisieren</button><button id="export" class="secondary">CSV exportieren</button></div><div class="stats" style="margin-top:14px"><div class="stat"><small>Positionen</small><strong id="count">–</strong></div><div class="stat"><small>Ausgelöste Alarme</small><strong id="alarms">–</strong></div><div class="stat"><small>Letzter Kursstand</small><strong id="last">–</strong></div></div><p class="hint">Hinweis: Die Kursversorgung ist derzeit manuell. „Aktuell“ bezieht sich nur auf das gespeicherte Kursdatum, nicht auf einen geprüften externen Datenfeed. Fonds-NAVs können mit Verzögerung erscheinen.</p><p class="hint">Stop-Abstand ändern: Wert anpassen und „Speichern“ klicken. Die neue Schwelle wird anhand des bisherigen Höchststands berechnet. Der erste erfasste Kurs setzt den Start-Höchststand.</p><div class="scroll"><table><thead><tr><th>Instrument</th><th>Gewicht</th><th>Abstand</th><th>Letzter Kurs</th><th>Höchststand</th><th>Stop</th><th>Stand</th><th>Status</th><th>Aktion</th></tr></thead><tbody id="rows"></tbody></table></div></section><section id="import" class="hidden"><h2>Tageskurs erfassen</h2><p class="hint">Kurse müssen in der Notierungswährung der Position eingegeben werden. Keine Mischung von NAV und Börsenkurs in einer Stop-Reihe. Ein Kursdatum kann pro Position nur einmal gespeichert werden.</p><div class="grid"><div><label>ISIN</label><select id="isin"></select></div><div><label>Kursdatum</label><input id="date" type="date"></div><div><label>Kurs</label><input id="price" type="number" min="0.000001" step="any" placeholder="z. B. 123.45"></div><div><label>Quelle</label><input id="source" placeholder="z. B. Emittent NAV"></div></div><p><button id="saveprice">Kurs speichern und Stop prüfen</button></p><h2>Mehrere Kurse per CSV importieren</h2><p class="hint">Format: <code>isin,date,price,source</code>, beispielsweise <code>DE0009770206,2026-11-13,123.45,Emittent NAV</code>. Semikolon als Trennzeichen wird ebenfalls akzeptiert. Dezimalpunkt verwenden. CSV-Zeilen werden nacheinander nach Datum verarbeitet.</p><input id="csv" type="file" accept=".csv,text/csv"><p><button id="importcsv" class="secondary">CSV importieren</button></p><p class="hint">Automatischer täglicher Abruf ist noch nicht aktiviert: Es fehlt eine für alle zehn ISINs verifizierte, zulässig nutzbare Kursquelle. Diese Oberfläche und der manuelle Fallback funktionieren unabhängig davon.</p></section><section><div id="message" role="status" aria-live="polite" class="hint">Bereit.</div></section></main><script type="module">
+</style></head><body><header><div><h1>◈ Portfolio Guard</h1><small>Tageskurse · individuelle Trailing-Stops · kein Handel</small></div><button id="logout" class="secondary hidden">Abmelden</button></header><main><section id="setup"><h2>1. Supabase verbinden</h2><p class="hint">Projekt-URL und <b>publishable/anon key</b> aus Supabase → Project Settings → API Keys. Niemals den service_role/secret key eintragen. Diese öffentlichen Verbindungsdaten bleiben nur in diesem Browser.</p><div class="grid"><div><label>Projekt-URL</label><input id="url" placeholder="https://xxxxx.supabase.co"></div><div><label>Publishable Key / anon key</label><input id="key" placeholder="sb_publishable_... oder eyJ..."></div></div><p><button id="connect">Verbinden</button></p></section><section id="login" class="hidden"><h2>2. Anmeldung</h2><div class="grid"><div><label>E-Mail</label><input id="email" type="email" autocomplete="email"></div><div><label>Passwort (mindestens 6 Zeichen)</label><input id="password" type="password" autocomplete="current-password"></div></div><p class="toolbar"><button id="signin">Anmelden</button><button id="signup" class="secondary">Registrieren</button></p><p class="hint">Falls E-Mail-Bestätigung in Supabase aktiviert ist, bestätige die Registrierung über den E-Mail-Link.</p></section><section id="app" class="hidden"><div class="toolbar"><button id="init">Zehn Positionen anlegen</button><button id="reload" class="secondary">Aktualisieren</button><button id="export" class="secondary">CSV exportieren</button></div><div class="stats" style="margin-top:14px"><div class="stat"><small>Positionen</small><strong id="count">–</strong></div><div class="stat"><small>Ausgelöste Alarme</small><strong id="alarms">–</strong></div><div class="stat"><small>Letzter Kursstand</small><strong id="last">–</strong></div></div><p class="hint">Hinweis: Die Kursversorgung ist derzeit manuell. „Aktuell“ bezieht sich nur auf das gespeicherte Kursdatum, nicht auf einen geprüften externen Datenfeed. Fonds-NAVs können mit Verzögerung erscheinen.</p><p class="hint">Stop-Abstand ändern: Wert anpassen und „Speichern“ klicken. Die neue Schwelle wird anhand des bisherigen Höchststands berechnet. Der erste erfasste Kurs setzt den Start-Höchststand.</p><div class="scroll"><table><thead><tr><th>Instrument</th><th>Gewicht</th><th>Abstand</th><th>Letzter Kurs</th><th>Höchststand</th><th>Stop</th><th>Stand</th><th>Status</th><th>Aktion</th></tr></thead><tbody id="rows"></tbody></table></div></section><section id="import" class="hidden"><h2>Tageskurs erfassen</h2><p class="hint">Kurse müssen in der Notierungswährung der Position eingegeben werden. Keine Mischung von NAV und Börsenkurs in einer Stop-Reihe. Ein Kursdatum kann pro Position nur einmal gespeichert werden.</p><div class="grid"><div><label>ISIN</label><select id="isin"></select></div><div><label>Kursdatum</label><input id="date" type="date"></div><div><label>Kurs</label><input id="price" type="number" min="0.000001" step="any" placeholder="z. B. 123.45"></div><div><label>Quelle</label><input id="source" placeholder="z. B. Emittent NAV"></div></div><p><button id="saveprice">Kurs speichern und Stop prüfen</button></p><h2>Mehrere Kurse per CSV importieren</h2><p class="hint">Format: <code>isin,date,price,source</code>, beispielsweise <code>DE0009770206,2026-11-13,123.45,Emittent NAV</code>. Semikolon als Trennzeichen wird ebenfalls akzeptiert. Dezimalpunkt verwenden. CSV-Zeilen werden nacheinander nach Datum verarbeitet.</p><input id="csv" type="file" accept=".csv,text/csv"><p class="toolbar"><button id="previewcsv" class="secondary">CSV prüfen</button><button id="importcsv" disabled>Geprüfte Kurse importieren</button></p><div id="csvpreview" class="hint" aria-live="polite">Bitte eine CSV-Datei auswählen und zuerst prüfen.</div><p class="hint">Automatischer täglicher Abruf ist noch nicht aktiviert: Es fehlt eine für alle zehn ISINs verifizierte, zulässig nutzbare Kursquelle. Diese Oberfläche und der manuelle Fallback funktionieren unabhängig davon.</p></section><section><div id="message" role="status" aria-live="polite" class="hint">Bereit.</div></section></main><script type="module">
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
 const $=id=>document.getElementById(id), msg=(s,bad=false)=>{$('message').textContent=s;$('message').className='hint '+(bad?'error':'ok')};let client=null,positions=[],instruments=[];const today=()=>new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Berlin'});$('date').value=today();$('url').value=localStorage.getItem('pg_url')||'';$('key').value=localStorage.getItem('pg_key')||'';
 function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function show(id,v){$(id).classList.toggle('hidden',!v)}function failure(e){msg(e?.message||String(e),true)}
@@ -10,7 +10,92 @@ async function refresh(){if(!client)return;const [a,b]=await Promise.all([client
 async function rpc(name,args={}){if(!client)throw Error('Nicht verbunden');const {data,error}=await client.rpc(name,args);if(error)throw error;return data}
 async function updateDistance(id){const distance=Number($('dist-'+id).value);if(!(distance>0&&distance<100))throw Error('Stop-Abstand muss zwischen 0 und 100 % liegen');await rpc('pg_set_distance',{p_position_id:id,p_distance:distance});await refresh();msg('Stop-Abstand gespeichert.')}async function savePrice(isin,date,price,source){if(!isin||!date||!Number.isFinite(Number(price))||Number(price)<=0)throw Error('Bitte gültige Kursdaten eingeben');return rpc('pg_record_price',{p_isin:isin,p_date:date,p_price:Number(price),p_source:source})}
 $('connect').onclick=connect;$('signin').onclick=()=>auth(false);$('signup').onclick=()=>auth(true);$('logout').onclick=async()=>{await client?.auth.signOut();msg('Abgemeldet.')};$('init').onclick=async()=>{try{await rpc('pg_initialize');await refresh();msg('Positionen angelegt.')}catch(e){failure(e)}};$('reload').onclick=()=>refresh().catch(failure);$('saveprice').onclick=async()=>{try{let status=await savePrice($('isin').value,$('date').value,$('price').value,$('source').value.trim());await refresh();msg('Kurs gespeichert. Status: '+status)}catch(e){failure(e)}};$('rows').onclick=async e=>{const b=e.target.closest('button[data-action]');if(!b)return;try{if(b.dataset.action==='distance')await updateDistance(b.dataset.id);if(b.dataset.action==='reset'){if(!confirm('Alarm bestätigen und neuen Höchststand erst beim nächsten Tageskurs beginnen?'))return;await rpc('pg_reset_stop',{p_isin:b.dataset.isin});await refresh();msg('Trailing-Stop neu gestartet.')}}catch(err){failure(err)}};
-$('importcsv').onclick=async()=>{try{const f=$('csv').files[0];if(!f)throw Error('CSV-Datei auswählen');const lines=(await f.text()).replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());const items=lines.map((line,n)=>{const cols=line.split(line.includes(';')?';':',').map(x=>x.trim().replace(/^"|"$/g,''));if(n===0&&cols[0].toLowerCase()==='isin')return null;if(cols.length!==4)throw Error('CSV-Zeile '+(n+1)+' benötigt vier Spalten');return {isin:cols[0],date:cols[1],price:cols[2],source:cols[3]}}).filter(Boolean).sort((a,b)=>a.date.localeCompare(b.date));let ok=0,errors=[];for(const x of items){try{await savePrice(x.isin,x.date,x.price,x.source);ok++}catch(e){errors.push(x.isin+' '+x.date+': '+e.message)}}await refresh();msg(`${ok} Kurse importiert.${errors.length?' Fehler: '+errors.slice(0,5).join(' | '):''}`,!!errors.length)}catch(e){failure(e)}};
+
+let approvedCSV=[];
+$('csv').addEventListener('change',()=>{approvedCSV=[];$('importcsv').disabled=true;$('csvpreview').textContent='Datei ausgewählt. Bitte erneut prüfen.'});
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,'');
+  const firstLine=text.split(/\r?\n/).find(x=>x.trim())||'';
+  const sep=(firstLine.match(/;/g)||[]).length>(firstLine.match(/,/g)||[]).length?';':',';
+  let rows=[],row=[],cell='',quoted=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(ch==='"'){
+      if(quoted&&text[i+1]==='"'){cell+='"';i++;}
+      else quoted=!quoted;
+    }else if(ch===sep&&!quoted){row.push(cell);cell='';}
+    else if((ch==='\n'||ch==='\r')&&!quoted){
+      if(ch==='\r'&&text[i+1]==='\n')i++;
+      row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell='';
+    }else cell+=ch;
+  }
+  if(quoted)throw Error('Nicht geschlossenes CSV-Anführungszeichen');
+  row.push(cell);if(row.some(v=>v.trim()))rows.push(row);
+  return rows;
+}
+function previewCSV(text){
+  const raw=parseCSV(text);
+  if(!raw.length||raw[0].map(x=>x.trim().toLowerCase()).join(',')!=='isin,date,price,source')
+    throw Error('CSV-Kopfzeile muss isin,date,price,source sein');
+  if(raw.length>501)throw Error('Maximal 500 Kurszeilen je Import');
+  const known=new Map(positions.map(p=>[p.isin,p]));
+  const seen=new Set();
+  const result=[],issues=[];
+  for(let i=1;i<raw.length;i++){
+    const a=raw[i].map(v=>v.trim()),line=i+1;
+    if(a.length!==4){issues.push('Zeile '+line+': vier Felder erforderlich');continue}
+    const [isin,date,price,source]=a;
+    if(!known.has(isin)){issues.push('Zeile '+line+': ISIN nicht im Depot');continue}
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date))||new Date(date+'T12:00:00Z').toISOString().slice(0,10)!==date||date>today()){
+      issues.push('Zeile '+line+': ungültiges oder zukünftiges Datum');continue
+    }
+    if(!/^\d+(?:\.\d{1,6})?$/.test(price)||!(Number(price)>0)||Number(price)>1e9){
+      issues.push('Zeile '+line+': ungültiger Kurs (Dezimalpunkt, maximal 6 Nachkommastellen)');continue
+    }
+    if(source.length<3||source.length>200){issues.push('Zeile '+line+': Quellenangabe 3–200 Zeichen');continue}
+    if(seen.has(isin+'|'+date)){issues.push('Zeile '+line+': doppelter Tageskurs');continue}
+    seen.add(isin+'|'+date);
+    if(known.get(isin).last_date&&date<=known.get(isin).last_date){
+      issues.push('Zeile '+line+': Kursdatum nicht neuer als gespeicherter Stand');continue
+    }
+    result.push({isin,date,price,source});
+  }
+  if(!result.length)issues.push('Keine importierbaren Kurse');
+  result.sort((a,b)=>a.date.localeCompare(b.date)||a.isin.localeCompare(b.isin));
+  return {result,issues};
+}
+$('previewcsv').onclick=async()=>{
+  try{
+    approvedCSV=[];$('importcsv').disabled=true;
+    const file=$('csv').files[0];
+    if(!file)throw Error('Bitte CSV-Datei auswählen');
+    if(file.size>100000)throw Error('Datei zu groß (maximal 100 KB)');
+    await refresh();
+    const {result,issues}=previewCSV(await file.text());
+    $('csvpreview').innerHTML='<strong>'+result.length+' gültige Kurszeilen, '+issues.length+' Fehler.</strong>'
+      +(issues.length?'<p class="error">'+issues.slice(0,12).map(esc).join('<br>')+'</p>':'')
+      +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Datum</th><th>Kurs</th><th>Quelle</th></tr></thead><tbody>'
+      +result.slice(0,20).map(x=>'<tr><td>'+esc(x.isin)+'</td><td>'+esc(x.date)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.source)+'</td></tr>').join('')
+      +'</tbody></table></div><p class="hint">Vorschau maximal 20 Zeilen. Prüfe vor dem Import Börsenplatz, Währung und Kursart.</p>';
+    if(!issues.length){approvedCSV=result;$('importcsv').disabled=false;msg('CSV formal gültig. Import nach Sichtprüfung möglich.')}
+    else msg('CSV nicht freigegeben: Bitte alle Fehler korrigieren.',true);
+  }catch(e){failure(e);$('csvpreview').textContent='Vorschau fehlgeschlagen.'}
+};
+$('importcsv').onclick=async()=>{
+  try{
+    if(!approvedCSV.length)throw Error('Bitte zunächst eine gültige CSV prüfen');
+    if(!confirm(approvedCSV.length+' Tageskurse dauerhaft in Supabase übernehmen und Trailing-Stops aktualisieren?'))return;
+    const rows=approvedCSV;approvedCSV=[];$('importcsv').disabled=true;
+    let ok=0,errors=[];
+    for(const x of rows){
+      try{await savePrice(x.isin,x.date,x.price,x.source);ok++;}
+      catch(e){errors.push(x.isin+' '+x.date+': '+e.message)}
+    }
+    await refresh();
+    $('csvpreview').textContent='Import abgeschlossen. Für weitere Kurse CSV erneut prüfen.';
+    msg(ok+' Kurse gespeichert.'+(errors.length?' '+errors.length+' Fehler: '+errors.slice(0,4).join(' | '):''),errors.length>0);
+  }catch(e){failure(e)}
+};
 $('export').onclick=()=>{const csv=['isin,weight_pct,distance_pct,last_date,last_price,high_price,stop_price,status',...positions.map(p=>[p.isin,p.weight_pct,p.distance_pct,p.last_date||'',p.last_price||'',p.high_price||'',p.stop_price||'',p.status].join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='portfolio-guard.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 if($('url').value&&$('key').value)connect();
 </script></body></html>
