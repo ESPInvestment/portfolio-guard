@@ -1,0 +1,25 @@
+name: Alpha Vantage follow-up audit (manual only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Audit eight ETF daily symbols
+        env:
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+        run: python tools/audit_alpha_daily.py
+      - name: Save audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha-followup-result
+          path: alpha_followup_result.json
+          retention-days: 2
+# Manually triggered only; never accesses Supabase.
