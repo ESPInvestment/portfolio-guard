@@ -64,3 +64,23 @@ ctx.reader=async file=>{if(file.name==='bad.json')throw Error('Invalid JSON');re
  assert.ok(html.includes('id="xetrafile" type="file" multiple'));
  console.log('PASS multi-file Xetra aggregation and error handling');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+async function checkStreaming(){
+ const raw='[{"instrumentIdentificationCode":"FR0010524777","venueOfExecution":"XETA","priceCurrency":"EUR","text":"escaped \\" quote"},{"instrumentIdentificationCode":"IE00B3VWM098","venueOfExecution":"XETB","priceCurrency":"EUR","nested":{"v":1}},{"instrumentIdentificationCode":"OTHER"}]';
+ const pieces=[];
+ for(let i=0;i<raw.length;i+=7)pieces.push(raw.slice(i,i+7));
+ ctx.pieces=pieces;
+ const result=await vm.runInContext('inspectXetraJsonStream(pieces)',ctx);
+ assert.equal(result.records,3);
+ assert.equal(result.count.FR0010524777,1);
+ assert.equal(result.count.IE00B3VWM098,1);
+ assert.equal(result.codedRecords,3);
+ assert.equal(result.identifierTypes[0][0],'Nicht angegeben');
+ assert.equal(result.venues[0][0],'XETA');
+ ctx.bad=['[{"instrumentIdentificationCode":"FR0010524777"}'];
+ await assert.rejects(vm.runInContext('inspectXetraJsonStream(bad)',ctx),/unvollständig/);
+ ctx.oversize=['[{"instrumentIdentificationCode":"FR0010524777","description":"'+('x'.repeat(2_000_001))+'"}]'];
+ await assert.rejects(vm.runInContext('inspectXetraJsonStream(oversize)',ctx),/zu groß/);
+ console.log('PASS streamed Xetra daily JSON including chunk boundaries, escaped strings and safety limits');
+}
+checkStreaming().catch(error=>{console.error(error);process.exitCode=1;});
