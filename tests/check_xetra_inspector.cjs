@@ -126,3 +126,21 @@ async function checkLastTrade(){
  console.log('PASS XETA/EUR time selection ignores XETB even when later');
 }
 checkLastTrade().catch(e=>{console.error(e);process.exitCode=1;});
+
+async function checkClosePhase(){
+ const data=[
+  {instrumentIdentificationCode:'IE00BFMNPS42',venueOfExecution:'XETA',priceCurrency:'EUR',tradingDateAndTime:'2026-11-13T16:35:20Z',price:'73.11'},
+  {instrumentIdentificationCode:'IE00BFMNPS42',venueOfExecution:'XETA',priceCurrency:'EUR',tradingDateAndTime:'2026-11-13T19:22:02Z',price:'73.42'},
+  {instrumentIdentificationCode:'IE00B3VWM098',venueOfExecution:'XETA',priceCurrency:'USD',tradingDateAndTime:'2026-11-13T16:35:20Z',price:'1000'},
+  {instrumentIdentificationCode:'IE00B3VWM098',venueOfExecution:'XETA',priceCurrency:'EUR',tradingDateAndTime:'2026-11-13T16:36:01Z',price:'615.3'}
+ ];
+ const raw=JSON.stringify(data);
+ ctx.closingChunks=[raw.slice(0,21),raw.slice(21,98),raw.slice(98)];
+ const result=await vm.runInContext('inspectXetraJsonStream(closingChunks)',ctx);
+ assert.equal(result.closePhaseTrades.IE00BFMNPS42.price,'73.11');
+ assert.equal(result.candidateTrades.IE00BFMNPS42.price,'73.42');
+ assert.equal(result.closePhaseTrades.IE00B3VWM098.price,'615.3');
+ assert.ok(html.includes('Vergleich: Schlussphase gegen letzten Handel'));
+ console.log('PASS Xetra closing phase comparison, including later trades and EUR-only');
+}
+checkClosePhase().catch(error=>{console.error(error);process.exitCode=1;});
