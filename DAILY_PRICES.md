@@ -30,3 +30,14 @@ Ein Workflow ist derzeit absichtlich **nicht** geplant. GitHub Actions ist erst 
 ## Sicherheits-Check
 Der öffentliche `publishable`-Schlüssel ist kein geheimes Passwort; `service_role`, API-Secrets und Depotdaten dürfen nicht in `index.html`, GitHub-Dateien oder öffentlichen Logs liegen.
 Die Supabase-RLS-Policies sollten separat geprüft werden, bevor der Job aktiviert wird.
+
+## Anbieterentscheidung (16.11.2026)
+- FMP Free: laut Anbieter nur US-Daten im Free-Paket, daher **nicht geeignet** für verlässliche kostenlose Abdeckung dieser zehn europäischen Fonds/ETFs. Quelle: https://site.financialmodelingprep.com/how-to/how-to-create-a-financial-modeling-prep-account
+- EODHD Free: 20 Calls/Tag und ein Jahr EOD-Historie; laut Anbieter für Tests/Evaluation und persönliche Nutzung; das belegt **keine** Zulässigkeit des automatischen Dauerbetriebs oder vollständige ISIN/NAV-Abdeckung. Nicht aktiviert. Quellen: https://eodhd.com/help/plans und https://github.com/EodHistoricalData/eodhd-claude-skills/blob/main/skills/eodhd-api/references/subscriptions/free.md
+- Kein Anbieter kann bislang für **alle zehn** Positionen auf Ebene echter API-Antworten plus Lizenzfreigabe bestätigt werden. Automatische Produktion bleibt deshalb gesperrt.
+
+## Ohne API-Schlüssel jetzt nutzbar
+- `python tools/validate_prices.py sample.csv` prüft die vorhandene CSV vor dem **manuellen** Import in die Web-App. Der Validator lädt **nichts hoch**.
+- `python -m unittest discover -s tests -v` testet die Formatprüfung vollständig offline.
+- Der GitHub-Workflow `check-daily-csv.yml` startet nur bei Pull Requests und manuell; **kein** täglicher Lauf, **keine** API- oder Supabase-Secrets.
+- Die CSV-Prüfung verhindert Formatfehler, bestätigt aber weder Preiswahrheit noch Quellenlizenz, Währung, Umrechnung oder korrekte Kursart.
