@@ -1,0 +1,33 @@
+name: Alpha Vantage coverage test (manual only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check API secret
+        env:
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+        run: |
+          if [ -z "$ALPHAVANTAGE_API_KEY" ]; then
+            echo 'Missing ALPHAVANTAGE_API_KEY GitHub Actions secret'
+            exit 1
+          fi
+      - name: Probe ten ISINs without updating any account
+        env:
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+        run: python tools/check_alpha_coverage.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha-coverage-result
+          path: alpha_coverage_result.json
+          retention-days: 1
+# No schedule, no Supabase keys, no trading.
