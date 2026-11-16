@@ -71,7 +71,7 @@ async function checkStreaming(){
  for(let i=0;i<raw.length;i+=7)pieces.push(raw.slice(i,i+7));
  ctx.pieces=pieces;
  const result=await vm.runInContext('inspectXetraJsonStream(pieces)',ctx);
- assert.equal(result.records,3);
+ assert.equal(result.records,4); // includes one nested JSON metadata object
  assert.equal(result.count.FR0010524777,1);
  assert.equal(result.count.IE00B3VWM098,1);
  assert.equal(result.codedRecords,3);
@@ -80,7 +80,32 @@ async function checkStreaming(){
  ctx.bad=['[{"instrumentIdentificationCode":"FR0010524777"}'];
  await assert.rejects(vm.runInContext('inspectXetraJsonStream(bad)',ctx),/unvollständig/);
  ctx.oversize=['[{"instrumentIdentificationCode":"FR0010524777","description":"'+('x'.repeat(2_000_001))+'"}]'];
- await assert.rejects(vm.runInContext('inspectXetraJsonStream(oversize)',ctx),/zu groß/);
+ const oversizeResult=await vm.runInContext('inspectXetraJsonStream(oversize)',ctx);
+ assert.ok(oversizeResult.skippedLarge>0);
+ assert.equal(oversizeResult.codedRecords,0);
  console.log('PASS streamed Xetra daily JSON including chunk boundaries, escaped strings and safety limits');
 }
 checkStreaming().catch(error=>{console.error(error);process.exitCode=1;});
+
+async function checkDailyFormats(){
+  async function inspect(text,size=11){
+    ctx.streamingPieces=[];
+    for(let i=0;i<text.length;i+=size)ctx.streamingPieces.push(text.slice(i,i+size));
+    return vm.runInContext('inspectXetraJsonStream(streamingPieces)',ctx);
+  }
+  const nested='{"metadata":{"venue":"XETA"},"postTrade":[{"instrumentIdentificationCode":"FR0010524777","priceCurrency":"EUR"},{"instrumentIdentificationCode":"IE00B3VWM098","priceCurrency":"EUR"}]}';
+  const wrapped=await inspect(nested);
+  assert.equal(wrapped.count.FR0010524777,1);
+  assert.equal(wrapped.count.IE00B3VWM098,1);
+  assert.equal(wrapped.format,'JSON-Objekt / JSONL');
+  const ndjson='{"instrumentIdentificationCode":"FR0010524777"}\n{"instrumentIdentificationCode":"IE00B3VWM098"}';
+  const multi=await inspect(ndjson,3);
+  assert.equal(multi.count.FR0010524777,1);
+  assert.equal(multi.count.IE00B3VWM098,1);
+  const big='{"trades":['+('{"filler":"'+('x'.repeat(2_000_005))+'"},')+'{"instrumentIdentificationCode":"FR0010524777"}]}';
+  const large=await inspect(big,65536);
+  assert.equal(large.count.FR0010524777,1);
+  assert.ok(large.skippedLarge>0);
+  console.log('PASS daily JSONL/root-wrapped objects/large bounded wrappers');
+}
+checkDailyFormats().catch(e=>{console.error(e);process.exitCode=1;});

@@ -192,79 +192,89 @@ function parseXetraSample(text){
     identifierTypes:[...identifierTypes],venues:[...venues],currencies:[...currencies]};
 }
 async function inspectXetraJsonStream(chunks){
-  // Large files are scanned one JSON record at a time, without keeping the full day in memory.
-  // This reader accepts a JSON array of trade objects, including nested fields in each record.
+  // Diagnostic-only, bounded-memory scanner for JSON arrays, JSONL, concatenated
+  // JSON objects and large wrapper objects; never extracts or stores price values.
   const count=Object.fromEntries(xetraIsins.map(isin=>[isin,0]));
-  const keys={},fieldCounts=new Map(),identifierTypes=new Map(),venues=new Map(),currencies=new Map(),exampleCodes=[];
-  let records=0,codedRecords=0,objects=0,arrays=1;
-  let started=false,ended=false,capturing=false,inString=false,escaped=false,depth=0,parts=[],recordLength=0,totalChars=0;
-  const add=(map,key)=>(map.set(key,(map.get(key)||0)+1));
-  function accept(record){
-    if(!record||typeof record!=='object'||Array.isArray(record))throw Error('Unerwarteter Datensatz');
-    records++;objects++;
-    if(records>5_000_000)throw Error('Zu viele Handelsdatensätze (max. 5 Millionen)');
-    const fields=Object.keys(record);
-    for(const key of fields)add(fieldCounts,key);
-    if(Object.prototype.hasOwnProperty.call(record,'instrumentIdentificationCode')){
-      codedRecords++;
-      const code=String(record.instrumentIdentificationCode??'').trim();
-      const typ=String(record.instrumentIdentificationCodeType??'Nicht angegeben').trim()||'Nicht angegeben';
-      add(identifierTypes,typ);
-      if(code&&exampleCodes.length<10&&!exampleCodes.includes(code))exampleCodes.push(code.slice(0,32));
-      add(venues,String(record.venueOfExecution??'Nicht angegeben').trim()||'Nicht angegeben');
-      add(currencies,String(record.priceCurrency??'Nicht angegeben').trim()||'Nicht angegeben');
-      if(Object.prototype.hasOwnProperty.call(count,code.toUpperCase())){
-        count[code.toUpperCase()]++;
-        if(!keys[code.toUpperCase()])keys[code.toUpperCase()]=fields.slice(0,30);
-      }
+  const keys={},fields=new Map(),types=new Map(),venues=new Map(),currencies=new Map();
+  const examples=[],rootKeys=[];
+  let records=0,arrays=0,bracketDepth=0,codedRecords=0,skippedLarge=0,totalChars=0;
+  let inString=false,escaped=false,firstToken='',objectStarts=0;
+  const frames=[];
+  function add(map,k){map.set(k,(map.get(k)||0)+1);}
+  function append(fragment){
+    if(!fragment)return;
+    for(const f of frames){
+      if(f.large)continue;
+      f.length+=fragment.length;
+      if(f.length>2_000_000){f.large=true;f.parts.length=0;skippedLarge++;continue;}
+      f.parts.push(fragment);
+    }
+  }
+  function processRecord(value){
+    if(!value||typeof value!=='object'||Array.isArray(value))return;
+    records++;
+    if(records>5_000_000)throw Error('Zu viele Datensätze (max. 5 Millionen)');
+    const names=Object.keys(value);
+    if(!rootKeys.length)rootKeys.push(...names.slice(0,25));
+    for(const k of names)add(fields,k);
+    if(!Object.prototype.hasOwnProperty.call(value,'instrumentIdentificationCode'))return;
+    codedRecords++;
+    const code=String(value.instrumentIdentificationCode??'').trim().toUpperCase();
+    add(types,String(value.instrumentIdentificationCodeType??'Nicht angegeben').trim()||'Nicht angegeben');
+    add(venues,String(value.venueOfExecution??'Nicht angegeben').trim()||'Nicht angegeben');
+    add(currencies,String(value.priceCurrency??'Nicht angegeben').trim()||'Nicht angegeben');
+    if(code&&examples.length<10&&!examples.includes(code))examples.push(code.slice(0,32));
+    if(Object.prototype.hasOwnProperty.call(count,code)){
+      count[code]++;
+      if(!keys[code])keys[code]=names.slice(0,30);
     }
   }
   for await(const chunk of chunks){
     totalChars+=chunk.length;
     if(totalChars>1_000_000_000)throw Error('Entpackte Daten über 1 GB – Prüfung abgebrochen');
-    let startPart=0;
+    let start=0;
     for(let i=0;i<chunk.length;i++){
       const c=chunk[i];
-      if(ended){if(!/\s/.test(c))throw Error('Unerwartete Daten nach der JSON-Liste');continue;}
-      if(!started){
-        if(/\s/.test(c))continue;
-        if(c!=='[')throw Error('Tagesdatei muss eine JSON-Liste mit Handelsmeldungen enthalten');
-        started=true;continue;
-      }
-      if(!capturing){
-        if(/\s/.test(c)||c===',')continue;
-        if(c===']'){ended=true;continue;}
-        if(c!=='{')throw Error('Unerwartetes Element in der Tagesdatei');
-        capturing=true;inString=false;escaped=false;depth=1;parts=[];recordLength=0;startPart=i;
-        continue;
-      }
+      if(!firstToken&&c!=='\uFEFF'&&!/\s/.test(c))firstToken=c;
       if(inString){
         if(escaped)escaped=false;
         else if(c==='\\')escaped=true;
         else if(c==='"')inString=false;
-      }else if(c==='"')inString=true;
-      else if(c==='{'||c==='[')depth++;
-      else if(c==='}'||c===']')depth--;
-      if(depth===0){
-        const fragment=chunk.slice(startPart,i+1);
-        recordLength+=fragment.length;
-        if(recordLength>2_000_000)throw Error('Ein Handelsdatensatz ist zu groß (max. 2 MB)');
-        parts.push(fragment);
-        accept(JSON.parse(parts.join('')));
-        capturing=false;parts=[];recordLength=0;startPart=i+1;
+        continue;
+      }
+      if(c==='"'){inString=true;continue;}
+      if(c==='['){arrays++;bracketDepth++;}
+      if(c===']'){bracketDepth--;if(bracketDepth<0)throw Error('Unerwartete schließende JSON-Liste');}
+      if(c==='{'){
+        append(chunk.slice(start,i));
+        if(frames.length>=32)throw Error('JSON-Verschachtelung zu tief (max. 32)');
+        // All enclosing frames must also contain the nested opening brace.
+        append('{');
+        frames.push({parts:['{'],length:1,large:false});
+        objectStarts++;
+        start=i+1;
+      }else if(c==='}'){
+        append(chunk.slice(start,i+1));
+        if(!frames.length)throw Error('Unerwartete schließende JSON-Klammer');
+        const completed=frames.pop();
+        if(!completed.large){
+          let record;
+          try{record=JSON.parse(completed.parts.join(''));}
+          catch(e){throw Error('JSON-Objekt ist ungültig: '+e.message);}
+          processRecord(record);
+        }
+        start=i+1;
       }
     }
-    if(capturing){
-      const fragment=chunk.slice(startPart);
-      recordLength+=fragment.length;
-      if(recordLength>2_000_000)throw Error('Ein Handelsdatensatz ist zu groß (max. 2 MB)');
-      parts.push(fragment);
-    }
+    append(chunk.slice(start));
   }
-  if(!started||!ended||capturing)throw Error('Die Tagesdatei ist unvollständig oder kein gültiges JSON-Array');
-  return {records:objects,count,keys,arrays,rootKeys:['JSON array'],codedRecords,exampleCodes,
-    commonFields:[...fieldCounts].sort((a,b)=>b[1]-a[1]).slice(0,25),
-    identifierTypes:[...identifierTypes],venues:[...venues],currencies:[...currencies]};
+  if(inString||frames.length||bracketDepth!==0)throw Error('JSON-Datei unvollständig oder beschädigt');
+  if(objectStarts===0)throw Error('Keine JSON-Handelsdatensätze gefunden. Erstes Zeichen: '+(firstToken||'leer'));
+  return {records,count,keys,arrays,codedRecords,skippedLarge,rootKeys,
+    format:firstToken==='['?'JSON-Liste':firstToken==='{'?'JSON-Objekt / JSONL':'Andere Struktur',
+    exampleCodes:examples,
+    commonFields:[...fields].sort((a,b)=>b[1]-a[1]).slice(0,25),
+    identifierTypes:[...types],venues:[...venues],currencies:[...currencies]};
 }
 function pakoGzipStream(file,InflateCtor){
   // pako supports RFC 1952 concatenated gzip members, unlike DecompressionStream on Chrome.
@@ -341,7 +351,8 @@ $('inspectxetra').onclick=async()=>{
     $('xetraresult').innerHTML='<p>'+result.records+' JSON-Objekte und '+result.arrays+' Arrays untersucht. ISIN-Treffer sind <b>kein</b> Nachweis eines Schlusskurses.</p>'
       +'<p><b>Dateien erfolgreich gelesen:</b> '+result.success+' von '+result.files+'</p>'
       +(result.failures.length?'<p class="error"><b>Fehler:</b> '+esc(result.failures.slice(0,5).join(' | '))+'</p>':'')
-      +'<p><b>Datei-Struktur:</b> '+esc(result.arrays?'JSON mit verschachtelten Listen':'JSON-Objekte ohne Listen')+'</p>'
+      +'<p><b>Datei-Struktur:</b> '+esc(result.format||'JSON')+'; '+result.arrays+' Arrays gefunden</p>'
+      +'<p><b>Große Hüllobjekte übersprungen:</b> '+(result.skippedLarge||0)+' (enthaltene kleinere Datensätze werden separat geprüft)</p>'
       +'<p><b>Felder auf oberster Ebene:</b> Bei mehreren Dateien nicht zusammengefasst</p>'
       +'<p><b>Datensätze mit instrumentIdentificationCode:</b> '+result.codedRecords+'</p>'
       +'<p><b>Identifikationstypen:</b> '+esc(result.identifierTypes.map(([k,v])=>k+' ('+v+')').join(', ')||'Keine')+'</p>'
