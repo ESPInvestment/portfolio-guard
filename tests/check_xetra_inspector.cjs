@@ -71,7 +71,7 @@ async function checkStreaming(){
  for(let i=0;i<raw.length;i+=7)pieces.push(raw.slice(i,i+7));
  ctx.pieces=pieces;
  const result=await vm.runInContext('inspectXetraJsonStream(pieces)',ctx);
- assert.equal(result.records,3);
+ assert.equal(result.records,4); // includes one nested JSON metadata object
  assert.equal(result.count.FR0010524777,1);
  assert.equal(result.count.IE00B3VWM098,1);
  assert.equal(result.codedRecords,3);
