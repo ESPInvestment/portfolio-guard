@@ -196,7 +196,7 @@ async function inspectXetraJsonStream(chunks){
   // JSON objects and large wrapper objects; never extracts or stores price values.
   const count=Object.fromEntries(xetraIsins.map(isin=>[isin,0]));
   const keys={},fields=new Map(),types=new Map(),venues=new Map(),currencies=new Map();
-  const examples=[],rootKeys=[],candidateTrades={};
+  const examples=[],rootKeys=[],candidateTrades={},closePhaseTrades={};
   let records=0,arrays=0,bracketDepth=0,codedRecords=0,skippedLarge=0,totalChars=0;
   let inString=false,escaped=false,firstToken='',objectStarts=0;
   const frames=[];
@@ -237,6 +237,15 @@ async function inspectXetraJsonStream(chunks){
         const previous=candidateTrades[code];
         if(!previous||time>previous.time)
           candidateTrades[code]={time,price,market,currency:curr,flags:JSON.stringify(value.flags??'–').slice(0,150),notation:String(value.priceNotation??'–').slice(0,70)};
+        const timestamp=Date.parse(time);
+        if(Number.isFinite(timestamp)){
+          const clock=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(timestamp));
+          if(clock>='17:30'&&clock<='17:39'){
+            const prior=closePhaseTrades[code];
+            if(!prior||time>prior.time)
+              closePhaseTrades[code]={time,price,flags:JSON.stringify(value.flags??'–').slice(0,150),notation:String(value.priceNotation??'–').slice(0,70)};
+          }
+        }
       }
     }
   }
@@ -283,7 +292,7 @@ async function inspectXetraJsonStream(chunks){
   if(objectStarts===0)throw Error('Keine JSON-Handelsdatensätze gefunden. Erstes Zeichen: '+(firstToken||'leer'));
   return {records,count,keys,arrays,codedRecords,skippedLarge,rootKeys,
     format:firstToken==='['?'JSON-Liste':firstToken==='{'?'JSON-Objekt / JSONL':'Andere Struktur',
-    exampleCodes:examples,candidateTrades,
+    exampleCodes:examples,candidateTrades,closePhaseTrades,
     commonFields:[...fields].sort((a,b)=>b[1]-a[1]).slice(0,25),
     identifierTypes:[...types],venues:[...venues],currencies:[...currencies]};
 }
@@ -336,14 +345,14 @@ async function scanXetraFiles(files,reader=readXetraFile){
   const totalBytes=selected.reduce((sum,f)=>sum+(f.size||0),0);
   if(totalBytes>300_000_000)throw Error('Dateien zusammen größer als 300 MB');
   const totals=Object.fromEntries(xetraIsins.map(k=>[k,0]));
-  const keys={},types=new Map(),markets=new Map(),currencies=new Map(),common=new Map(),candidateTrades={};
+  const keys={},types=new Map(),markets=new Map(),currencies=new Map(),common=new Map(),candidateTrades={},closePhaseTrades={};
   let objects=0,arrays=0,codedRecords=0,success=0;
   const failures=[];
   for(const file of selected){
     try{
       const x=await reader(file);
       success++;objects+=x.records;arrays+=x.arrays;codedRecords+=x.codedRecords;
-      for(const isin of xetraIsins){totals[isin]+=x.count[isin]||0;if(!keys[isin]&&x.keys[isin])keys[isin]=x.keys[isin];const t=x.candidateTrades?.[isin];if(t&&(!candidateTrades[isin]||t.time>candidateTrades[isin].time))candidateTrades[isin]=t;}
+      for(const isin of xetraIsins){totals[isin]+=x.count[isin]||0;if(!keys[isin]&&x.keys[isin])keys[isin]=x.keys[isin];const t=x.candidateTrades?.[isin];if(t&&(!candidateTrades[isin]||t.time>candidateTrades[isin].time))candidateTrades[isin]=t;const c=x.closePhaseTrades?.[isin];if(c&&(!closePhaseTrades[isin]||c.time>closePhaseTrades[isin].time))closePhaseTrades[isin]=c;}
       for(const [name,amount] of x.identifierTypes)types.set(name,(types.get(name)||0)+amount);
       for(const [name,amount] of x.venues)markets.set(name,(markets.get(name)||0)+amount);
       for(const [name,amount] of x.currencies)currencies.set(name,(currencies.get(name)||0)+amount);
@@ -352,7 +361,7 @@ async function scanXetraFiles(files,reader=readXetraFile){
   }
   return {files:selected.length,success,failures,records:objects,arrays,codedRecords,count:totals,keys,
     identifierTypes:[...types],venues:[...markets],currencies:[...currencies],
-    commonFields:[...common].sort((a,b)=>b[1]-a[1]).slice(0,25),candidateTrades};
+    commonFields:[...common].sort((a,b)=>b[1]-a[1]).slice(0,25),candidateTrades,closePhaseTrades};
 }
 $('inspectxetra').onclick=async()=>{
   $('inspectxetra').disabled=true;
@@ -374,6 +383,11 @@ $('inspectxetra').onclick=async()=>{
       +(Object.values(result.count).every(x=>x===0)?'<p class="error"><b>0 ISIN-Treffer:</b> Möglicherweise keine Trades der acht ETFs in diesem Zeitfenster oder ein anderes Identifikationsformat. Auch mehrere kurze Zeitfenster beweisen keine fehlende Tagesabdeckung.</p>':'')
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Treffer</th><th>Gefundene Feldnamen (max. 30)</th></tr></thead><tbody>'
       +xetraIsins.map(isin=>'<tr><td>'+esc(isin)+'</td><td>'+result.count[isin]+'</td><td>'+esc((result.keys[isin]||[]).join(', ')||'–')+'</td></tr>').join('')
+      +'</tbody></table></div>'
+      +'<h3>Vergleich: Schlussphase gegen letzten Handel (XETA / EUR)</h3>'
+      +'<p class="hint">Schlussphase: 17:30 bis vor 17:40 Uhr deutscher Zeit (MEZ/MESZ), einschließlich möglicher Schlussauktion und Trade-at-Close. Dies ist kein amtlicher Schlusskurs. Außerhalb dieser Phase kann der erweiterte Retailhandel laufen. Keine automatische Kursfreigabe.</p>'
+      +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Schlussphase: letzter gemeldeter Preis</th><th>Uhrzeit (Deutschland)</th><th>Letzter XETA/EUR-Preis gesamt</th><th>Uhrzeit (Deutschland)</th><th>Bemerkung</th></tr></thead><tbody>'
+      +xetraIsins.map(isin=>{const c=result.closePhaseTrades?.[isin],t=result.candidateTrades?.[isin];const clock=x=>x?.time?new Date(x.time).toLocaleString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}):'–';return '<tr><td>'+esc(isin)+'</td><td>'+esc(c?.price||'–')+'</td><td>'+esc(clock(c))+'</td><td>'+esc(t?.price||'–')+'</td><td>'+esc(clock(t))+'</td><td>'+esc(!c?'Keine Meldung in Schlussphase':t?.time!==c.time?'Späterer Handel vorhanden':'Gleiche letzte Meldung')+'</td></tr>';}).join('')
       +'</tbody></table></div>'
       +'<h3>Letzte XETA/EUR-Handelsmeldung je ISIN – nur Vergleichsvorschau</h3>'
       +'<p class="hint">Keine amtlichen Schlusskurse. Handel kann korrigiert oder storniert sein; Flags und Preisnotation müssen vor jeder Verwendung geprüft werden. Kein Import möglich.</p>'
