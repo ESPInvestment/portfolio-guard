@@ -165,3 +165,17 @@ function testPriceQuality(){
   console.log('PASS price quality table always blocks unverified prices');
 }
 testPriceQuality();
+
+function testManualReference(){
+ ctx.refFixture={closePhaseTrades:{FR0010524777:{time:'2026-11-13T16:35:00Z',price:'38.25'}}};
+ const run=(isin,date,price,source)=>{ctx.refArgs=[isin,date,price,source];return vm.runInContext('compareXetraOfficialReference(refFixture,...refArgs)',ctx);};
+ assert.equal(run('FR0010524777','2026-11-13','38.25','Boerse Frankfurt').status,'Numerisch übereinstimmend – manuell prüfen');
+ assert.equal(run('FR0010524777','2026-11-13','38.50','Boerse Frankfurt').status,'Abweichung – manuell prüfen');
+ assert.equal(run('FR0010524777','2026-11-14','38.25','Boerse Frankfurt').status,'Datum abweichend');
+ assert.equal(run('FR0010524777','2026-11-13','38.25','').status,'Quellenangabe fehlt');
+ assert.equal(run('IE00B3VWM098','2026-11-13','38.25','Boerse Frankfurt').status,'Nicht bestätigt');
+ assert.ok(!html.includes('Speichern als offiziellen Schlusskurs'));
+ assert.ok(html.includes('Keine Stop-Freigabe'));
+ console.log('PASS reference comparison is read-only and fail closed');
+}
+testManualReference();
