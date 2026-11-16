@@ -285,7 +285,7 @@ function pakoGzipStream(file,InflateCtor){
         if(outputBytes>1_000_000_000)throw Error('Entpackte Datei größer als 1 GB');
         controller.enqueue(bytes);
       };
-      if(!inflate.push(new Uint8Array(0),true))throw Error('Gzip-Datei unvollständig: '+(inflate.msg||'Dateiende fehlt'));
+      if(!inflate.ended&&!inflate.push(new Uint8Array(0),true))throw Error('Gzip-Datei unvollständig: '+(inflate.msg||'Dateiende fehlt'));
     }
   }));
 }
