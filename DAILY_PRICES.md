@@ -41,3 +41,24 @@ Die Supabase-RLS-Policies sollten separat geprüft werden, bevor der Job aktivie
 - `python -m unittest discover -s tests -v` testet die Formatprüfung vollständig offline.
 - Der GitHub-Workflow `check-daily-csv.yml` startet nur bei Pull Requests und manuell; **kein** täglicher Lauf, **keine** API- oder Supabase-Secrets.
 - Die CSV-Prüfung verhindert Formatfehler, bestätigt aber weder Preiswahrheit noch Quellenlizenz, Währung, Umrechnung oder korrekte Kursart.
+
+## Yahoo Finance und Stooq: Prüfung vom 16.11.2026
+
+**Yahoo Finance**
+- Kein offizieller kostenloser Finanzmarktdaten-API-Zugang für eine tägliche GitHub-Actions-Integration identifiziert.
+- Yahoo untersagt laut Nutzungsbedingungen automatisierte Sammlung ohne vorherige Erlaubnis. `yfinance` ist nicht offiziell.
+- Deshalb **kein automatischer Yahoo-Importer** und auch keine Behauptung, dass die acht Xetra-Ticker durch eine autorisierte Schnittstelle bestätigt sind.
+- Referenzen: https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html und https://github.com/ranaroussi/yfinance
+
+**Stooq**
+- Historische CSV-Dateien sind für private Nutzung verfügbar, jedoch keine zuverlässige unterstützte Cloud-API mit garantierter ETF-Abdeckung.
+- Die automatisierte Auslieferung ist nach unabhängigen Prüfungen teilweise durch Anti-Bot-/CAPTCHA-Sperren eingeschränkt; Nutzungsrechte für die geplante Verwendung nicht belegt.
+- Deshalb **kein unbeaufsichtigter Stooq-Importer**.
+- Referenz: https://stockmarketstack.com/tools/stooq
+
+**Ergebnis**
+- Kein automatischer Kursimport aus diesen beiden Quellen aktiviert.
+- Für keines der acht ETF-Ticker ist durch diese Prüfung eine verwertbare, lizenzierte API-Antwort bestätigt worden.
+- Portfolio Guard bleibt mit manueller Eingabe und CSV-Import nutzbar.
+- Nächste Entscheidung: explizit freigegebene kostenlose Kurs-API oder ein von einem Anbieter erlaubter manueller Export; außerdem NAV-Daten für DE0009770206 und LU1799928095 gesondert klären.
+- Keine täglichen Jobs, keine zusätzlichen Kosten und keine Supabase-Datenänderungen.
