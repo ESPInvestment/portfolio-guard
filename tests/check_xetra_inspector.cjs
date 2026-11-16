@@ -144,3 +144,24 @@ async function checkClosePhase(){
  console.log('PASS Xetra closing phase comparison, including later trades and EUR-only');
 }
 checkClosePhase().catch(error=>{console.error(error);process.exitCode=1;});
+
+function testPriceQuality(){
+  ctx.qFixture={count:{FR0010524777:2,IE00BFMNPS42:3,IE00BGQYRS42:1},closePhaseTrades:{
+    FR0010524777:{price:'38.25',notation:'MONE',flags:'"ALGO"',time:'2026-11-13T16:36:00Z'},
+    IE00BFMNPS42:{price:'73.13',notation:'MONE',flags:'"–"',time:'2026-11-13T16:35:00Z'},
+    IE00BGQYRS42:{price:'143.22',notation:'MONE',flags:'"CANC"',time:'2026-11-13T16:35:00Z'}
+  },candidateTrades:{
+    FR0010524777:{price:'38.25',time:'2026-11-13T16:36:00Z'},
+    IE00BFMNPS42:{price:'73.42',time:'2026-11-13T19:22:00Z'},
+    IE00BGQYRS42:{price:'143.22',time:'2026-11-13T16:35:00Z'}
+  }};
+  const evaluate=isin=>vm.runInContext('assessXetraPriceQuality('+JSON.stringify(isin)+',qFixture)',ctx);
+  assert.equal(evaluate('FR0010524777').status,'Vorläufiger Vergleichskurs');
+  assert.equal(evaluate('IE00BFMNPS42').status,'Prüfung erforderlich');
+  assert.equal(evaluate('IE00BGQYRS42').status,'Prüfung erforderlich');
+  assert.equal(evaluate('IE00B3VWM098').status,'Kein verwendbarer Kurs');
+  for(const isin of ['FR0010524777','IE00BFMNPS42','IE00BGQYRS42','IE00B3VWM098'])assert.equal(evaluate(isin).safe,false);
+  assert.ok(html.includes('Kursqualitätsprüfung – keine Kursfreigabe'));
+  console.log('PASS price quality table always blocks unverified prices');
+}
+testPriceQuality();
