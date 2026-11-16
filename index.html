@@ -338,6 +338,23 @@ async function readXetraFile(file){
   }
   return inspectXetraJsonStream(chunks());
 }
+function assessXetraPriceQuality(isin,data){
+  const c=data.closePhaseTrades?.[isin],t=data.candidateTrades?.[isin];
+  const hits=data.count?.[isin]||0;
+  if(!hits||!c)return {status:'Kein verwendbarer Kurs',reason:!hits?'Keine Handelsmeldung':'Keine XETA/EUR-Meldung zwischen 17:30 und 17:39',safe:false};
+  const value=Number(c.price),notation=c.notation||'';
+  if(!/^\d+(?:\.\d+)?$/.test(String(c.price))||!Number.isFinite(value)||value<=0||notation!=='MONE')
+    return {status:'Prüfung erforderlich',reason:'Preis oder Preisnotation nicht als positive MONE-Notierung geprüft',safe:false};
+  const flags=String(c.flags||'');
+  // ALGO is informational, but other flags need a proper cancellation/correction review.
+  const unknown=flags.replace(/ALGO/gi,'').replace(/["\[\]\{\},:\s–-]/g,'').trim();
+  if(unknown)return {status:'Prüfung erforderlich',reason:'Weitere Handelskennzeichen vorhanden – Storno-/Korrekturprüfung offen',safe:false};
+  if(t&&t.time!==c.time){
+    const later=Number(t.price),delta=Number.isFinite(later)&&later>0?100*(later/value-1):null;
+    return {status:'Prüfung erforderlich',reason:'Späterer XETA-Handel'+(delta===null?'':' ('+(delta>=0?'+':'')+delta.toFixed(2)+' %)')+'; amtlicher Schlusskurs fehlt',safe:false};
+  }
+  return {status:'Vorläufiger Vergleichskurs',reason:'Schlussphasen-Meldung vorhanden; amtlicher Schlusskurs und Korrekturen noch nicht unabhängig geprüft',safe:false};
+}
 async function scanXetraFiles(files,reader=readXetraFile){
   const selected=Array.from(files||[]);
   if(!selected.length)throw Error('Bitte mindestens eine Datei auswählen');
@@ -383,6 +400,11 @@ $('inspectxetra').onclick=async()=>{
       +(Object.values(result.count).every(x=>x===0)?'<p class="error"><b>0 ISIN-Treffer:</b> Möglicherweise keine Trades der acht ETFs in diesem Zeitfenster oder ein anderes Identifikationsformat. Auch mehrere kurze Zeitfenster beweisen keine fehlende Tagesabdeckung.</p>':'')
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Treffer</th><th>Gefundene Feldnamen (max. 30)</th></tr></thead><tbody>'
       +xetraIsins.map(isin=>'<tr><td>'+esc(isin)+'</td><td>'+result.count[isin]+'</td><td>'+esc((result.keys[isin]||[]).join(', ')||'–')+'</td></tr>').join('')
+      +'</tbody></table></div>'
+      +'<h3>Kursqualitätsprüfung – keine Kursfreigabe</h3>'
+      +'<p class="hint">Status bewertet ausschließlich die vorliegenden Handelsmeldungen. Ein amtlicher Schlusskurs wurde nicht abgeglichen. Keine der Zeilen ist für automatische Trailing-Stops freigegeben.</p>'
+      +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Schlussphasen-Kandidat</th><th>Prüfstatus</th><th>Begründung</th><th>Für Stop-Berechnung</th></tr></thead><tbody>'
+      +xetraIsins.map(isin=>{const q=assessXetraPriceQuality(isin,result),c=result.closePhaseTrades?.[isin];return '<tr><td>'+esc(isin)+'</td><td>'+esc(c?.price||'–')+'</td><td>'+esc(q.status)+'</td><td>'+esc(q.reason)+'</td><td>Gesperrt</td></tr>';}).join('')
       +'</tbody></table></div>'
       +'<h3>Vergleich: Schlussphase gegen letzten Handel (XETA / EUR)</h3>'
       +'<p class="hint">Schlussphase: 17:30 bis vor 17:40 Uhr deutscher Zeit (MEZ/MESZ), einschließlich möglicher Schlussauktion und Trade-at-Close. Dies ist kein amtlicher Schlusskurs. Außerhalb dieser Phase kann der erweiterte Retailhandel laufen. Keine automatische Kursfreigabe.</p>'
