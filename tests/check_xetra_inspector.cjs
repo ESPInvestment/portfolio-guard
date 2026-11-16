@@ -109,3 +109,20 @@ async function checkDailyFormats(){
   console.log('PASS daily JSONL/root-wrapped objects/large bounded wrappers');
 }
 checkDailyFormats().catch(e=>{console.error(e);process.exitCode=1;});
+
+async function checkLastTrade(){
+ const data=[
+  {instrumentIdentificationCode:'FR0010524777',venueOfExecution:'XETA',priceCurrency:'EUR',tradingDateAndTime:'2026-11-13T15:01:00Z',price:'101.20',priceNotation:'MONE',flags:'ABC'},
+  {instrumentIdentificationCode:'FR0010524777',venueOfExecution:'XETA',priceCurrency:'EUR',tradingDateAndTime:'2026-11-13T16:01:00Z',price:'101.30',priceNotation:'MONE'},
+  {instrumentIdentificationCode:'FR0010524777',venueOfExecution:'XETB',priceCurrency:'EUR',tradingDateAndTime:'2026-11-13T18:01:00Z',price:'199.00'}
+ ];
+ const text=JSON.stringify(data);
+ ctx.tradeChunks=[text.slice(0,29),text.slice(29,83),text.slice(83)];
+ const parsed=await vm.runInContext('inspectXetraJsonStream(tradeChunks)',ctx);
+ assert.equal(parsed.count.FR0010524777,3);
+ assert.equal(parsed.candidateTrades.FR0010524777.price,'101.30');
+ assert.equal(parsed.candidateTrades.FR0010524777.market,'XETA');
+ assert.ok(html.includes('nur Vergleichsvorschau'));
+ console.log('PASS XETA/EUR time selection ignores XETB even when later');
+}
+checkLastTrade().catch(e=>{console.error(e);process.exitCode=1;});
