@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const html = fs.readFileSync('index.html', 'utf8');
 const sourceMatch = html.match(/<script type="module">([\s\S]*?)<\/script>/);
 assert.ok(sourceMatch, 'Expected inline app module');
-let source = sourceMatch[1].replace(/^import\s+\{createClient\}[^\n]*\n/, '');
+let source = sourceMatch[1].replace(/^\s*import\s+\{createClient\}[^\n]*\n/, '');
 const elements = new Map();
 function element(id) {
   if (!elements.has(id)) elements.set(id, {
