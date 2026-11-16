@@ -380,10 +380,27 @@ async function scanXetraFiles(files,reader=readXetraFile){
     identifierTypes:[...types],venues:[...markets],currencies:[...currencies],
     commonFields:[...common].sort((a,b)=>b[1]-a[1]).slice(0,25),candidateTrades,closePhaseTrades};
 }
+let xetraComparisonResult=null;
+function compareXetraOfficialReference(data,isin,date,price,source){
+  const candidate=data?.closePhaseTrades?.[isin];
+  if(!candidate)return {status:'Nicht bestätigt',detail:'Kein Schlussphasen-Kandidat für diese ISIN vorhanden.'};
+  const value=Number(price),candidateValue=Number(candidate.price);
+  if(!/^\d+(?:\.\d{1,6})?$/.test(String(price))||!(value>0)||!Number.isFinite(value))
+    return {status:'Ungültige Eingabe',detail:'Nur positive EUR-Preise mit Dezimalpunkt (maximal sechs Stellen).'};
+  if(!Number.isFinite(candidateValue)||candidateValue<=0)
+    return {status:'Nicht bestätigt',detail:'Der Xetra-Vergleichswert ist kein gültiger positiver Preis.'};
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date!==candidate.time.slice(0,10))
+    return {status:'Datum abweichend',detail:'Referenzdatum und Handelstag der Xetra-Datei müssen übereinstimmen.'};
+  if(String(source||'').trim().length<8)return {status:'Quellenangabe fehlt',detail:'Bitte die genaue Quelle und Fundstelle ergänzen.'};
+  const diff=100*(candidateValue/value-1);
+  return {status:Math.abs(diff)<=0.01?'Numerisch übereinstimmend – manuell prüfen':'Abweichung – manuell prüfen',
+    detail:'Xetra-Kandidat: '+candidate.price+' EUR; eingegebener Referenzkurs: '+price+' EUR; Differenz: '+(diff>=0?'+':'')+diff.toFixed(3)+' %. Ein amtlicher Kurs wurde technisch nicht verifiziert. Keine Stop-Freigabe.'};
+}
 $('inspectxetra').onclick=async()=>{
   $('inspectxetra').disabled=true;
   try{
     const result=await scanXetraFiles($('xetrafile').files);
+    xetraComparisonResult=null;
     if(!result.success)throw Error('Keine der ausgewählten Dateien konnte gelesen werden: '+result.failures.slice(0,3).join(' | '));
     $('xetraresult').innerHTML='<p>'+result.records+' JSON-Objekte und '+result.arrays+' Arrays untersucht. ISIN-Treffer sind <b>kein</b> Nachweis eines Schlusskurses.</p>'
       +'<p><b>Dateien erfolgreich gelesen:</b> '+result.success+' von '+result.files+'</p>'
@@ -401,6 +418,14 @@ $('inspectxetra').onclick=async()=>{
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Treffer</th><th>Gefundene Feldnamen (max. 30)</th></tr></thead><tbody>'
       +xetraIsins.map(isin=>'<tr><td>'+esc(isin)+'</td><td>'+result.count[isin]+'</td><td>'+esc((result.keys[isin]||[]).join(', ')||'–')+'</td></tr>').join('')
       +'</tbody></table></div>'
+      +'<h3>Unabhängigen Schlusskurs vergleichen (nur lokal)</h3>'
+      +'<p class="hint">Offiziellen EUR-Schlusskurs und Quelle selbst anhand des Börsentags prüfen. Eingaben werden nicht gespeichert. Ein übereinstimmender Wert ist nur ein manueller Abgleich, keine automatische Freigabe.</p>'
+      +'<div class="toolbar"><label>ETF <select id="reference-isin">'+xetraIsins.map(isin=>'<option value="'+esc(isin)+'">'+esc(isin)+'</option>').join('')+'</select></label>'
+      +'<label>Offizieller Schlusskurs (EUR) <input id="reference-price" type="number" min="0.000001" step="any" placeholder="z. B. 73.13"></label>'
+      +'<label>Handelstag <input id="reference-date" type="date"></label>'
+      +'<label>Quelle / Fundstelle <input id="reference-source" type="text" placeholder="z. B. Deutsche Börse, Xetra" maxlength="200"></label>'
+      +'<button id="compare-reference" class="secondary">Referenzkurs vergleichen</button></div>'
+      +'<div id="reference-result" class="hint">Noch kein Schlusskurs unabhängig verglichen.</div>'
       +'<h3>Kursqualitätsprüfung – keine Kursfreigabe</h3>'
       +'<p class="hint">Status bewertet ausschließlich die vorliegenden Handelsmeldungen. Ein amtlicher Schlusskurs wurde nicht abgeglichen. Keine der Zeilen ist für automatische Trailing-Stops freigegeben.</p>'
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Schlussphasen-Kandidat</th><th>Prüfstatus</th><th>Begründung</th><th>Für Stop-Berechnung</th></tr></thead><tbody>'
@@ -416,6 +441,12 @@ $('inspectxetra').onclick=async()=>{
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Handelszeit (Quelldaten)</th><th>Preis (roh)</th><th>Notation</th><th>Flags</th></tr></thead><tbody>'
       +xetraIsins.map(isin=>{const t=result.candidateTrades?.[isin];return '<tr><td>'+esc(isin)+'</td><td>'+esc(t?.time||'–')+'</td><td>'+esc(t?.price||'–')+'</td><td>'+esc(t?.notation||'–')+'</td><td>'+esc(t?.flags||'–')+'</td></tr>';}).join('')
       +'</tbody></table></div><p>Kein Upload, kein Kursimport, keine Stop-Änderung.</p>';
+    xetraComparisonResult=result;
+    $('reference-date').value=result.closePhaseTrades?.[xetraIsins[0]]?.time?.slice(0,10)||'';
+    $('compare-reference').onclick=()=>{
+      const outcome=compareXetraOfficialReference(xetraComparisonResult,$('reference-isin').value,$('reference-date').value,$('reference-price').value,$('reference-source').value);
+      $('reference-result').textContent=outcome.status+': '+outcome.detail;
+    };
     msg('Xetra-Dateiprüfung abgeschlossen. Keine Kurse verändert.');
   }catch(err){$('xetraresult').textContent='Dateiprüfung fehlgeschlagen: '+(err?.message||String(err));failure(err)}
   finally{$('inspectxetra').disabled=false}
