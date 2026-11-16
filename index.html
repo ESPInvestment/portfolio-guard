@@ -148,7 +148,8 @@ function parseXetraSample(text){
   }
   const count=Object.fromEntries(xetraIsins.map(k=>[k,0]));
   const keys={},rootKeys=Object.keys(parsed&&typeof parsed==='object'?parsed:{});
-  const fieldCounts=new Map();
+  const fieldCounts=new Map(),identifierTypes=new Map(),venues=new Map(),currencies=new Map(),exampleCodes=[];
+  let codedRecords=0;
   let objects=0,arrays=0,scanned=0;
   const pending=[{value:parsed,depth:0}];
   while(pending.length){
@@ -164,6 +165,17 @@ function parseXetraSample(text){
     objects++;
     const fields=Object.keys(value);
     for(const key of fields){fieldCounts.set(key,(fieldCounts.get(key)||0)+1);}
+    if(Object.prototype.hasOwnProperty.call(value,'instrumentIdentificationCode')){
+      codedRecords++;
+      const code=String(value.instrumentIdentificationCode??'').trim();
+      const idType=String(value.instrumentIdentificationCodeType??'Nicht angegeben').trim()||'Nicht angegeben';
+      identifierTypes.set(idType,(identifierTypes.get(idType)||0)+1);
+      if(code&&exampleCodes.length<10&&!exampleCodes.includes(code))exampleCodes.push(code.slice(0,32));
+      const venue=String(value.venueOfExecution??'Nicht angegeben').trim()||'Nicht angegeben';
+      const currency=String(value.priceCurrency??'Nicht angegeben').trim()||'Nicht angegeben';
+      venues.set(venue,(venues.get(venue)||0)+1);
+      currencies.set(currency,(currencies.get(currency)||0)+1);
+    }
     for(const isin of xetraIsins){
       if(fields.some(key=>typeof value[key]==='string'&&value[key].toUpperCase()===isin)){
         count[isin]++;
@@ -176,7 +188,8 @@ function parseXetraSample(text){
     }
   }
   return {records:objects,count,keys,arrays,rootKeys:rootKeys.slice(0,25),
-    commonFields:[...fieldCounts].sort((a,b)=>b[1]-a[1]).slice(0,25)};
+    commonFields:[...fieldCounts].sort((a,b)=>b[1]-a[1]).slice(0,25),codedRecords,exampleCodes,
+    identifierTypes:[...identifierTypes],venues:[...venues],currencies:[...currencies]};
 }
 async function readXetraFile(file){
   if(!file)throw Error('Bitte eine Datei auswählen');
@@ -200,6 +213,11 @@ $('inspectxetra').onclick=async()=>{
     $('xetraresult').innerHTML='<p>'+result.records+' JSON-Objekte und '+result.arrays+' Arrays untersucht. ISIN-Treffer sind <b>kein</b> Nachweis eines Schlusskurses.</p>'
       +'<p><b>Datei-Struktur:</b> '+esc(result.arrays?'JSON mit verschachtelten Listen':'JSON-Objekte ohne Listen')+'</p>'
       +'<p><b>Felder auf oberster Ebene:</b> '+esc(result.rootKeys.join(', ')||'Keine')+'</p>'
+      +'<p><b>Datensätze mit instrumentIdentificationCode:</b> '+result.codedRecords+'</p>'
+      +'<p><b>Identifikationstypen:</b> '+esc(result.identifierTypes.map(([k,v])=>k+' ('+v+')').join(', ')||'Keine')+'</p>'
+      +'<p><b>Beispiel-Kennungen (max. 10):</b> '+esc(result.exampleCodes.join(', ')||'Keine')+'</p>'
+      +'<p><b>Handelsplätze:</b> '+esc(result.venues.map(([k,v])=>k+' ('+v+')').join(', ')||'Keine')+'</p>'
+      +'<p><b>Währungen:</b> '+esc(result.currencies.map(([k,v])=>k+' ('+v+')').join(', ')||'Keine')+'</p>'
       +'<p><b>Häufigste Feldnamen:</b> '+esc(result.commonFields.map(x=>x[0]+' ('+x[1]+')').join(', ')||'Keine')+'</p>'
       +(Object.values(result.count).every(x=>x===0)?'<p class="error"><b>0 ISIN-Treffer:</b> Möglicherweise keine Trades der acht ETFs in diesem Zeitfenster oder ein anderes Identifikationsformat. Eine einzelne Minutendatei beweist keine fehlende Abdeckung.</p>':'')
       +'<div class="scroll"><table><thead><tr><th>ISIN</th><th>Treffer</th><th>Gefundene Feldnamen (max. 30)</th></tr></thead><tbody>'
