@@ -41,3 +41,26 @@ assert.ok(html.includes('id="inspectxetra"'));
 assert.ok(html.includes('DecompressionStream'));
 assert.ok(!script.includes("savePrice(result"));
 console.log('PASS Xetra inspector: local ISIN counting, no price extraction or writes');
+
+const fake=[
+ {name:'one.json',size:300},
+ {name:'two.json',size:200},
+ {name:'bad.json',size:100}
+];
+const sample1={records:2,arrays:1,codedRecords:2,count:{FR0010524777:1},keys:{FR0010524777:['instrumentIdentificationCode']},identifierTypes:[['ISIN',2]],venues:[['XETA',2]],currencies:[['EUR',2]],commonFields:[['instrumentIdentificationCode',2]]};
+const sample2={records:1,arrays:1,codedRecords:1,count:{FR0010524777:1,IE00B3VWM098:1},keys:{IE00B3VWM098:['instrumentIdentificationCode']},identifierTypes:[['ISIN',1]],venues:[['XETA',1]],currencies:[['EUR',1]],commonFields:[['instrumentIdentificationCode',1]]};
+ctx.samples=[sample1,sample2];
+ctx.files=fake;
+ctx.reader=async file=>{if(file.name==='bad.json')throw Error('Invalid JSON');return ctx.samples[file.name==='one.json'?0:1];};
+(async ()=>{
+ const agg=await vm.runInContext('scanXetraFiles(files,reader)',ctx);
+ assert.equal(agg.files,3);
+ assert.equal(agg.success,2);
+ assert.equal(agg.failures.length,1);
+ assert.equal(agg.count.FR0010524777,2);
+ assert.equal(agg.count.IE00B3VWM098,1);
+ assert.equal(agg.codedRecords,3);
+ assert.equal(agg.venues[0][1],3);
+ assert.ok(html.includes('id="xetrafile" type="file" multiple'));
+ console.log('PASS multi-file Xetra aggregation and error handling');
+})().catch(error=>{console.error(error);process.exitCode=1;});
