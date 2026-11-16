@@ -20,6 +20,17 @@ assert.equal(nested.count.IE00B3VWM098,1);
 assert.ok(nested.commonFields.some(x=>x[0]==='instrumentIdentificationCode'));
 assert.ok(nested.arrays>=1);
 assert.equal(nested.rootKeys[0],'postTrade');
+assert.equal(nested.codedRecords,2);
+assert.equal(nested.identifierTypes[0][0],'Nicht angegeben');
+assert.equal(nested.exampleCodes.length,2);
+ctx.rich='[{"instrumentIdentificationCode":"OTHER","instrumentIdentificationCodeType":"ISIN","venueOfExecution":"XETA","priceCurrency":"EUR"},{"instrumentIdentificationCode":"FR0010524777","instrumentIdentificationCodeType":"ISIN","venueOfExecution":"XETA","priceCurrency":"EUR"}]';
+const rich=vm.runInContext('parseXetraSample(rich)',ctx);
+assert.equal(rich.codedRecords,2);
+assert.equal(rich.identifierTypes[0][0],'ISIN');
+assert.equal(rich.venues[0][0],'XETA');
+assert.equal(rich.currencies[0][0],'EUR');
+assert.equal(rich.count.FR0010524777,1);
+
 ctx.zero='{"data":[{"instrumentIdentificationCode":"OTHER"}]}';
 const empty=vm.runInContext('parseXetraSample(zero)',ctx);
 assert.equal(Object.values(empty.count).reduce((a,b)=>a+b,0),0);
