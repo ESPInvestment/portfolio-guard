@@ -1,0 +1,11 @@
+isin,price_type,provider_symbol,exchange,currency,verified,notes
+DE0009770206,NAV,,,EUR,false,KVG-NAV-Quelle noch nicht verifiziert
+FR0010524777,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+IE00B3VWM098,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+IE00B4KBBD01,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+IE00BFMNPS42,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+IE00BGQYRS42,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+IE00BMX0B631,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+IE00BWBXM617,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+LU0321465469,CLOSE,,,,false,Boersenplatz und Kurswaehrung festlegen
+LU1799928095,NAV,,,EUR,false,KVG-NAV-Quelle noch nicht verifiziert
