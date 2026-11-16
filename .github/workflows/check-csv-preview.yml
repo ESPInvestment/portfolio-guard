@@ -17,4 +17,6 @@ jobs:
       - run: node tests/check_csv_template.cjs
       - run: node tests/check_price_status.cjs
       - run: node tests/check_xetra_inspector.cjs
+      - run: npm install --no-save --ignore-scripts pako@2.2.0
+      - run: node tests/check_xetra_multimember_gzip.cjs
 # No schedule, Supabase access, market data API or account writes.
