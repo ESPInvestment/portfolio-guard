@@ -13,4 +13,5 @@ jobs:
         with:
           node-version: '22'
       - run: node tests/check_csv_preview.cjs
+      - run: node tests/check_csv_integration.cjs
 # No schedule, Supabase access, market data API or account writes.
