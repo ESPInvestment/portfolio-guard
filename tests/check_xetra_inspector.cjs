@@ -80,7 +80,9 @@ async function checkStreaming(){
  ctx.bad=['[{"instrumentIdentificationCode":"FR0010524777"}'];
  await assert.rejects(vm.runInContext('inspectXetraJsonStream(bad)',ctx),/unvollständig/);
  ctx.oversize=['[{"instrumentIdentificationCode":"FR0010524777","description":"'+('x'.repeat(2_000_001))+'"}]'];
- await assert.rejects(vm.runInContext('inspectXetraJsonStream(oversize)',ctx),/zu groß/);
+ const oversizeResult=await vm.runInContext('inspectXetraJsonStream(oversize)',ctx);
+ assert.ok(oversizeResult.skippedLarge>0);
+ assert.equal(oversizeResult.codedRecords,0);
  console.log('PASS streamed Xetra daily JSON including chunk boundaries, escaped strings and safety limits');
 }
 checkStreaming().catch(error=>{console.error(error);process.exitCode=1;});
